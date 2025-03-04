@@ -31,7 +31,7 @@ jobs:
           CIBW_SKIP: "pp* *-musllinux*"  # Skip PyPy and musllinux
           CIBW_BEFORE_BUILD: "pip install numpy"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           path: ./python/wheelhouse/*.whl
           name: wheels-${{ matrix.os }}
@@ -57,7 +57,7 @@ jobs:
           cd python
           python -m build --sdist
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           path: ./python/dist/*.tar.gz
           name: sdist
@@ -67,7 +67,7 @@ jobs:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: dist
           
