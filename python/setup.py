@@ -1,193 +1,217 @@
 from setuptools import setup, Extension, find_packages, Distribution
 import os
 import platform
-import sys
 import re
 import shutil
+from pathlib import Path
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
 
-# Check if we're running in GitHub Actions
+# Environment setup
 IN_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
+ROOT_DIR = Path(__file__).parent
+PARENT_SRC_DIR = ROOT_DIR.parent.joinpath('src')
+LOCAL_SRC_DIR = Path('src')
 
-# Read long description from README
-readme_path = os.path.join(os.path.dirname(__file__), "README.md")
-with open(readme_path, "r", encoding="utf-8") as f:
-    long_description = f.read()
-
-# List of source files needed for the extension
-source_files = [
-    'allocator.cpp',
-    'clusterizer.cpp',
-    'indexcodec.cpp',
-    'indexgenerator.cpp',
-    'overdrawanalyzer.cpp',
-    'overdrawoptimizer.cpp',
-    'simplifier.cpp',
-    'spatialorder.cpp',
-    'stripifier.cpp',
-    'vcacheanalyzer.cpp',
-    'vcacheoptimizer.cpp',
-    'vertexcodec.cpp',
-    'vertexfilter.cpp',
-    'vfetchanalyzer.cpp',
-    'vfetchoptimizer.cpp',
-    'quantization.cpp',
+# Source files needed for the extension - define explicitly to avoid issues
+SOURCE_FILES = [
+    'allocator.cpp', 'clusterizer.cpp', 'indexcodec.cpp', 'indexgenerator.cpp',
+    'overdrawanalyzer.cpp', 'overdrawoptimizer.cpp', 'simplifier.cpp',
+    'spatialorder.cpp', 'stripifier.cpp', 'vcacheanalyzer.cpp',
+    'vcacheoptimizer.cpp', 'vertexcodec.cpp', 'vertexfilter.cpp',
+    'vfetchanalyzer.cpp', 'vfetchoptimizer.cpp', 'quantization.cpp',
     'partition.cpp',
 ]
 
-# Custom sdist command to include C++ source files
-class CustomSdist(sdist):
-    def make_release_tree(self, base_dir, files):
-        super().make_release_tree(base_dir, files)
-        
-        # Only include C++ source files in the sdist when in GitHub Actions
-        if IN_GITHUB_ACTIONS:
-            # Create src directory in the distribution
-            src_dir = os.path.join(base_dir, 'src')
-            os.makedirs(src_dir, exist_ok=True)
-            
-            # Copy source files from parent directory
-            parent_src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-            for src_file in source_files + ['meshoptimizer.h']:
-                src_path = os.path.join(parent_src_dir, src_file)
-                dst_path = os.path.join(src_dir, src_file)
-                if os.path.exists(src_path):
-                    shutil.copy2(src_path, dst_path)
-                else:
-                    raise RuntimeError(f"Source file not found: {src_path}")
+HEADER_FILES = ['meshoptimizer.h']
+ALL_CPP_FILES = SOURCE_FILES + HEADER_FILES
 
-# Custom build_ext command to handle source files
-class GithubActionsBuildExt(build_ext):
-    def run(self):
-        # Only copy files when in GitHub Actions
-        if IN_GITHUB_ACTIONS and not os.path.exists('src'):
-            os.makedirs('src', exist_ok=True)
-            
-            # Copy source files from parent directory
-            parent_src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-            for src_file in source_files + ['meshoptimizer.h']:
-                src_path = os.path.join(parent_src_dir, src_file)
-                dst_path = os.path.join('src', src_file)
-                if os.path.exists(src_path):
-                    shutil.copy2(src_path, dst_path)
-                elif os.path.exists(os.path.join('..', 'src', src_file)):
-                    # Try alternative path
-                    alt_src_path = os.path.join('..', 'src', src_file)
-                    shutil.copy2(alt_src_path, dst_path)
-                else:
-                    raise RuntimeError(f"Source file not found: {src_path}")
-        
-        # Run the original build_ext command
-        super().run()
+# Read long description from README
+README_PATH = ROOT_DIR.joinpath("README.md")
+try:
+    with open(README_PATH, "r", encoding="utf-8") as f:
+        LONG_DESCRIPTION = f.read()
+except:
+    LONG_DESCRIPTION = "Python wrapper for meshoptimizer library"
 
-# Read version from package or use a default
+
 def get_version():
-    # Try to read version from meshoptimizer.h in parent directory
-    try:
-        header_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src', 'meshoptimizer.h'))
-        with open(header_path, 'r') as f:
-            content = f.read()
-            version_match = re.search(r'#define\s+MESHOPTIMIZER_VERSION\s+(\d+)', content)
+    """Extract version from meshoptimizer.h"""
+    # Possible locations for meshoptimizer.h
+    header_paths = [
+        PARENT_SRC_DIR.joinpath('meshoptimizer.h'),
+        LOCAL_SRC_DIR.joinpath('meshoptimizer.h')
+    ]
+
+    for header_path in header_paths:
+        if not header_path.exists():
+            continue
+
+        try:
+            content = header_path.read_text()
+            version_match = re.search(
+                r'#define\s+MESHOPTIMIZER_VERSION\s+(\d+)', content)
             if version_match:
                 version = int(version_match.group(1))
                 major = version // 10000
                 minor = (version // 100) % 100
                 patch = version % 100
                 return f"{major}.{minor}.{patch}"
-    except:
-        # If that fails, try to read from local src directory (when building from sdist)
-        try:
-            if os.path.exists('src/meshoptimizer.h'):
-                with open('src/meshoptimizer.h', 'r') as f:
-                    content = f.read()
-                    version_match = re.search(r'#define\s+MESHOPTIMIZER_VERSION\s+(\d+)', content)
-                    if version_match:
-                        version = int(version_match.group(1))
-                        major = version // 10000
-                        minor = (version // 100) % 100
-                        patch = version % 100
-                        return f"{major}.{minor}.{patch}"
-        except:
-            pass
-    
-    return '0.1.0'  # Default version if unable to extract
+        except Exception:
+            continue
 
-# Get long description from README
-def get_long_description():
-    try:
-        readme_path = os.path.join(os.path.dirname(__file__), 'README.md')
-        with open(readme_path, 'r') as f:
-            return f.read()
-    except:
-        return 'Python wrapper for meshoptimizer library'
+    # Default version if unable to extract
+    return '0.1.0'
+
+
+def copy_cpp_sources(source_dir, target_dir):
+    """Copy C++ source files from source_dir to target_dir"""
+    if isinstance(target_dir, str):
+        target_dir = Path(target_dir)
+        
+    target_dir.mkdir(exist_ok=True)
+    
+    # Determine the source directory to use
+    if not source_dir.exists():
+        # Try alternate path if source_dir doesn't exist
+        alt_source_dir = Path('..').joinpath('src')
+        if alt_source_dir.exists():
+            source_dir = alt_source_dir
+        else:
+            # If we're building from sdist, files should be in LOCAL_SRC_DIR already
+            # If no source files are found, we'll get errors later when trying to build
+            return
+    
+    # Copy all files from source to target
+    for src_file in ALL_CPP_FILES:
+        src_path = source_dir.joinpath(src_file)
+        dst_path = target_dir.joinpath(src_file)
+        
+        if src_path.exists():
+            shutil.copy2(src_path, dst_path)
+        else:
+            # Try to find the file in alternate locations before failing
+            alt_paths = [
+                Path('..').joinpath('src', src_file),
+                LOCAL_SRC_DIR.joinpath(src_file)
+            ]
+            found = False
+            for alt_path in alt_paths:
+                if alt_path.exists():
+                    shutil.copy2(alt_path, dst_path)
+                    found = True
+                    break
+            
+            # Only raise an error if file is essential and nowhere to be found
+            if not found and src_file in HEADER_FILES:
+                raise RuntimeError(f"Essential file not found: {src_file}")
+
+
+# Shared mixin for common source copying functionality
+class SourceCopyMixin:
+    """Mixin class providing C++ source file copying functionality"""
+    def copy_sources_if_needed(self, target_dir=None):
+        """Copy C++ sources if in GitHub Actions and needed"""
+        if not IN_GITHUB_ACTIONS:
+            return
+            
+        if target_dir is None:
+            target_dir = LOCAL_SRC_DIR
+            
+        copy_cpp_sources(PARENT_SRC_DIR, target_dir)
+
+
+class CustomSdist(SourceCopyMixin, sdist):
+    """Custom sdist command to include C++ source files"""
+    def make_release_tree(self, base_dir, files):
+        super().make_release_tree(base_dir, files)
+        self.copy_sources_if_needed(Path(base_dir).joinpath('src'))
+
+
+class CustomBuildExt(SourceCopyMixin, build_ext):
+    """Custom build_ext command to handle source files"""
+    def run(self):
+        self.copy_sources_if_needed()
+        super().run()
+
 
 # Platform-specific compile arguments
-extra_compile_args = ['-std=c++11']
-if platform.system() != 'Windows':
-    extra_compile_args.append('-fPIC')
-if platform.system() == 'Darwin':
-    extra_compile_args.extend(['-stdlib=libc++', '-mmacosx-version-min=10.9'])
+def get_compile_args():
+    """Get platform-specific compilation arguments"""
+    args = ['-std=c++11']
+    
+    if platform.system() != 'Windows':
+        args.append('-fPIC')
+    
+    if platform.system() == 'Darwin':
+        args.extend(['-stdlib=libc++', '-mmacosx-version-min=10.9'])
+    
+    return args
+
 
 # Define the extension module
-if IN_GITHUB_ACTIONS:
-    # In GitHub Actions, use the local src directory
-    meshoptimizer_module = Extension(
+def get_extension_module():
+    """Create the extension module with appropriate paths"""
+    compile_args = get_compile_args()
+    
+    if IN_GITHUB_ACTIONS or not PARENT_SRC_DIR.exists():
+        # In GitHub Actions or when building from sdist, use the local src directory
+        sources = [str(LOCAL_SRC_DIR.joinpath(f)) for f in SOURCE_FILES]
+        include_dirs = [str(LOCAL_SRC_DIR)]
+    else:
+        # When building locally, use the parent src directory
+        sources = [str(PARENT_SRC_DIR.joinpath(f)) for f in SOURCE_FILES]
+        include_dirs = [str(PARENT_SRC_DIR)]
+    
+    return Extension(
         'meshoptimizer._meshoptimizer',
-        sources=['src/' + f for f in source_files],  # Use relative paths with src/ prefix
-        include_dirs=['src'],  # Use relative path to src directory
-        extra_compile_args=extra_compile_args,
-        language='c++',
-    )
-else:
-    # When building locally, use the parent src directory
-    parent_src_dir = os.path.join('..', 'src')
-    meshoptimizer_module = Extension(
-        'meshoptimizer._meshoptimizer',
-        sources=[os.path.join(parent_src_dir, f) for f in source_files],
-        include_dirs=[parent_src_dir],
-        extra_compile_args=extra_compile_args,
+        sources=sources,
+        include_dirs=include_dirs,
+        extra_compile_args=compile_args,
         language='c++',
     )
 
-# Custom Distribution to include C++ source files
+
 class BinaryDistribution(Distribution):
+    """Custom Distribution to include C++ source files"""
     def has_ext_modules(self):
         return True
 
-setup(
-    name='meshoptimizer',
-    version=get_version(),
-    description='Python wrapper for meshoptimizer library',
-    long_description=get_long_description(),
-    long_description_content_type='text/markdown',
-    url='https://github.com/zeux/meshoptimizer',
-    packages=find_packages(),
-    ext_modules=[meshoptimizer_module],
-    cmdclass={
-        'build_ext': GithubActionsBuildExt,
-        'sdist': CustomSdist,
-    },
-    distclass=BinaryDistribution,
-    include_package_data=True,
-    install_requires=[
-        'numpy>=1.19.0',
-    ],
-    python_requires='>=3.6',
-    classifiers=[
-        'Development Status :: 4 - Beta',
-        'Intended Audience :: Developers',
-        'Topic :: Multimedia :: Graphics :: 3D Modeling',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
-        'Programming Language :: Python :: 3.12',
-        'Programming Language :: Python :: 3.13',
-    ],
-    keywords='mesh optimization graphics 3d',
-)
+
+if __name__ == "__main__":
+    setup(
+        name='meshoptimizer',
+        version=get_version(),
+        description='Python wrapper for meshoptimizer library',
+        long_description=LONG_DESCRIPTION,
+        long_description_content_type='text/markdown',
+        url='https://github.com/zeux/meshoptimizer',
+        packages=find_packages(),
+        ext_modules=[get_extension_module()],
+        cmdclass={
+            'build_ext': CustomBuildExt,
+            'sdist': CustomSdist,
+        },
+        distclass=BinaryDistribution,
+        include_package_data=True,
+        install_requires=[
+            'numpy>=1.19.0',
+        ],
+        python_requires='>=3.6',
+        classifiers=[
+            'Development Status :: 4 - Beta',
+            'Intended Audience :: Developers',
+            'Topic :: Multimedia :: Graphics :: 3D Modeling',
+            'License :: OSI Approved :: MIT License',
+            'Programming Language :: Python :: 3',
+            'Programming Language :: Python :: 3.6',
+            'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.9',
+            'Programming Language :: Python :: 3.10',
+            'Programming Language :: Python :: 3.11',
+            'Programming Language :: Python :: 3.12',
+            'Programming Language :: Python :: 3.13',
+        ],
+        keywords='mesh optimization graphics 3d',
+    )
