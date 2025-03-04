@@ -2,16 +2,23 @@ from setuptools import setup, Extension, find_packages
 import os
 import platform
 import sys
+import re
+
+# Define absolute paths to ensure files can be found regardless of working directory
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+src_dir = os.path.join(root_dir, 'src')
 
 # Read long description from README
-with open(os.path.join(os.path.dirname(__file__), "README.md"), "r", encoding="utf-8") as f:
+readme_path = os.path.join(os.path.dirname(__file__), "README.md")
+with open(readme_path, "r", encoding="utf-8") as f:
     long_description = f.read()
-import re
 
 # Read version from package or use a default
 def get_version():
     try:
-        with open(os.path.join(os.path.dirname(__file__), '..', 'src', 'meshoptimizer.h'), 'r') as f:
+        # Use absolute path to meshoptimizer.h
+        header_path = os.path.join(src_dir, 'meshoptimizer.h')
+        with open(header_path, 'r') as f:
             content = f.read()
             version_match = re.search(r'#define\s+MESHOPTIMIZER_VERSION\s+(\d+)', content)
             if version_match:
@@ -27,14 +34,15 @@ def get_version():
 # Get long description from README
 def get_long_description():
     try:
-        with open(os.path.join(os.path.dirname(__file__), 'README.md'), 'r') as f:
+        readme_path = os.path.join(os.path.dirname(__file__), 'README.md')
+        with open(readme_path, 'r') as f:
             return f.read()
     except:
         return 'Python wrapper for meshoptimizer library'
 
 # Determine source files
 source_files = [
-    os.path.join('..', 'src', f) for f in [
+    os.path.join(src_dir, f) for f in [
         'allocator.cpp',
         'clusterizer.cpp',
         'indexcodec.cpp',
@@ -70,7 +78,7 @@ os.makedirs(build_temp_dir, exist_ok=True)
 meshoptimizer_module = Extension(
     'meshoptimizer._meshoptimizer',
     sources=source_files,
-    include_dirs=[os.path.join('..', 'src')],
+    include_dirs=[src_dir],  # Use the absolute path to src directory
     extra_compile_args=extra_compile_args,
     language='c++',
 )
