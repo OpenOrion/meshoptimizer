@@ -1,0 +1,2 @@
+# Include C++ source files
+include src/*.cpp src/*.h
