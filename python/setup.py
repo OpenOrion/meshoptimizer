@@ -13,17 +13,43 @@ ROOT_DIR = Path(__file__).parent
 PARENT_SRC_DIR = ROOT_DIR.parent.joinpath('src')
 LOCAL_SRC_DIR = Path('src')
 
-# Source files needed for the extension - define explicitly to avoid issues
-SOURCE_FILES = [
-    'allocator.cpp', 'clusterizer.cpp', 'indexcodec.cpp', 'indexgenerator.cpp',
-    'overdrawanalyzer.cpp', 'overdrawoptimizer.cpp', 'simplifier.cpp',
-    'spatialorder.cpp', 'stripifier.cpp', 'vcacheanalyzer.cpp',
-    'vcacheoptimizer.cpp', 'vertexcodec.cpp', 'vertexfilter.cpp',
-    'vfetchanalyzer.cpp', 'vfetchoptimizer.cpp', 'quantization.cpp',
-    'partition.cpp',
-]
+# Function to discover source files
+def discover_source_files():
+    """Discover source files in available directories - fails if none found"""
+    source_files = []
+    header_files = []
+    
+    # Potential source directories to check, in order of preference
+    source_dirs = [PARENT_SRC_DIR, LOCAL_SRC_DIR, Path('..').joinpath('src')]
+    
+    # Find the first directory that exists and contains cpp files
+    found_dir = None
+    for src_dir in source_dirs:
+        if not src_dir.exists():
+            continue
+            
+        # Look for cpp files
+        cpp_files = list(src_dir.glob('*.cpp'))
+        if cpp_files:
+            source_files = [p.name for p in cpp_files]
+            # Look for header files
+            h_files = list(src_dir.glob('*.h'))
+            header_files = [p.name for p in h_files]
+            found_dir = src_dir
+            break
+    
+    # Fail if no source files found
+    if not source_files:
+        dirs_checked = ', '.join(str(d) for d in source_dirs)
+        raise RuntimeError(f"No source files found in any of: {dirs_checked}")
+    
+    if not header_files:
+        raise RuntimeError(f"No header files found in {found_dir}")
+        
+    return source_files, header_files
 
-HEADER_FILES = ['meshoptimizer.h']
+# Discover source files - will raise an error if not found
+SOURCE_FILES, HEADER_FILES = discover_source_files()
 ALL_CPP_FILES = SOURCE_FILES + HEADER_FILES
 
 # Read long description from README
