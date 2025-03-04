@@ -14,7 +14,7 @@ PARENT_SRC_DIR = ROOT_DIR.parent.joinpath('src')
 LOCAL_SRC_DIR = Path('src')
 
 # Function to discover source files
-def discover_source_files():
+def get_source_files():
     """Discover source files in available directories - fails if none found"""
     source_files = []
     header_files = []
@@ -49,17 +49,12 @@ def discover_source_files():
     return source_files, header_files
 
 # Discover source files - will raise an error if not found
-SOURCE_FILES, HEADER_FILES = discover_source_files()
+SOURCE_FILES, HEADER_FILES = get_source_files()
 ALL_CPP_FILES = SOURCE_FILES + HEADER_FILES
 
 # Read long description from README
 README_PATH = ROOT_DIR.joinpath("README.md")
-try:
-    with open(README_PATH, "r", encoding="utf-8") as f:
-        LONG_DESCRIPTION = f.read()
-except:
-    LONG_DESCRIPTION = "Python wrapper for meshoptimizer library"
-
+LONG_DESCRIPTION = README_PATH.read_text()
 
 def get_version():
     """Extract version from meshoptimizer.h"""
@@ -86,8 +81,9 @@ def get_version():
         except Exception:
             continue
 
-    # Default version if unable to extract
-    return '0.1.0'
+    raise RuntimeError(
+        f"Could not find version in {header_paths[0]} or {header_paths[1]}"
+    )
 
 
 def copy_cpp_sources(source_dir, target_dir):
