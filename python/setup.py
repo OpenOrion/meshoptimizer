@@ -7,6 +7,9 @@ import shutil
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
 
+# Check if we're running in GitHub Actions
+IN_GITHUB_ACTIONS = os.environ.get('GITHUB_ACTIONS') == 'true'
+
 # Read long description from README
 readme_path = os.path.join(os.path.dirname(__file__), "README.md")
 with open(readme_path, "r", encoding="utf-8") as f:
@@ -38,26 +41,27 @@ class CustomSdist(sdist):
     def make_release_tree(self, base_dir, files):
         super().make_release_tree(base_dir, files)
         
-        # Create src directory in the distribution
-        src_dir = os.path.join(base_dir, 'src')
-        os.makedirs(src_dir, exist_ok=True)
-        
-        # Copy source files from parent directory
-        parent_src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
-        for src_file in source_files + ['meshoptimizer.h']:
-            src_path = os.path.join(parent_src_dir, src_file)
-            dst_path = os.path.join(src_dir, src_file)
-            if os.path.exists(src_path):
-                shutil.copy2(src_path, dst_path)
-            else:
-                raise RuntimeError(f"Source file not found: {src_path}")
+        # Only include C++ source files in the sdist when in GitHub Actions
+        if IN_GITHUB_ACTIONS:
+            # Create src directory in the distribution
+            src_dir = os.path.join(base_dir, 'src')
+            os.makedirs(src_dir, exist_ok=True)
+            
+            # Copy source files from parent directory
+            parent_src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
+            for src_file in source_files + ['meshoptimizer.h']:
+                src_path = os.path.join(parent_src_dir, src_file)
+                dst_path = os.path.join(src_dir, src_file)
+                if os.path.exists(src_path):
+                    shutil.copy2(src_path, dst_path)
+                else:
+                    raise RuntimeError(f"Source file not found: {src_path}")
 
 # Custom build_ext command to handle source files
-class CustomBuildExt(build_ext):
+class GithubActionsBuildExt(build_ext):
     def run(self):
-        # Create src directory in the current directory if it doesn't exist
-        # This is needed for the Extension to find the source files
-        if not os.path.exists('src'):
+        # Only copy files when in GitHub Actions
+        if IN_GITHUB_ACTIONS and not os.path.exists('src'):
             os.makedirs('src', exist_ok=True)
             
             # Copy source files from parent directory
@@ -126,13 +130,25 @@ if platform.system() == 'Darwin':
     extra_compile_args.extend(['-stdlib=libc++', '-mmacosx-version-min=10.9'])
 
 # Define the extension module
-meshoptimizer_module = Extension(
-    'meshoptimizer._meshoptimizer',
-    sources=['src/' + f for f in source_files],  # Use relative paths with src/ prefix
-    include_dirs=['src'],  # Use relative path to src directory
-    extra_compile_args=extra_compile_args,
-    language='c++',
-)
+if IN_GITHUB_ACTIONS:
+    # In GitHub Actions, use the local src directory
+    meshoptimizer_module = Extension(
+        'meshoptimizer._meshoptimizer',
+        sources=['src/' + f for f in source_files],  # Use relative paths with src/ prefix
+        include_dirs=['src'],  # Use relative path to src directory
+        extra_compile_args=extra_compile_args,
+        language='c++',
+    )
+else:
+    # When building locally, use the parent src directory
+    parent_src_dir = os.path.join('..', 'src')
+    meshoptimizer_module = Extension(
+        'meshoptimizer._meshoptimizer',
+        sources=[os.path.join(parent_src_dir, f) for f in source_files],
+        include_dirs=[parent_src_dir],
+        extra_compile_args=extra_compile_args,
+        language='c++',
+    )
 
 # Custom Distribution to include C++ source files
 class BinaryDistribution(Distribution):
@@ -149,7 +165,7 @@ setup(
     packages=find_packages(),
     ext_modules=[meshoptimizer_module],
     cmdclass={
-        'build_ext': CustomBuildExt,
+        'build_ext': GithubActionsBuildExt,
         'sdist': CustomSdist,
     },
     distclass=BinaryDistribution,
