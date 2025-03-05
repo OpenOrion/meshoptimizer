@@ -23,6 +23,8 @@ pip install -e .
 - Vertex fetch optimization
 - Mesh simplification
 - Vertex/index buffer compression and decompression
+- Zip file storage for encoded meshes
+- Numpy array compression and storage
 - And more...
 
 ## Usage
@@ -113,10 +115,120 @@ optimize_overdraw(
 
 # And so on...
 ```
-
 ## Notes on Index Encoding/Decoding
 
 When using the index buffer encoding and decoding functions, note that the decoded indices may not exactly match the original indices, even though the mesh geometry remains the same. This is due to how the meshoptimizer library internally encodes and decodes the indices. The triangles may be in a different order, but the resulting mesh is still valid and represents the same geometry.
+
+## Zip File Storage
+
+You can store encoded meshes in zip files for easy distribution and storage:
+
+```python
+import numpy as np
+from meshoptimizer import Mesh, save_mesh_to_zip, load_mesh_from_zip
+
+# Create a mesh
+vertices = np.array([[-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5]], dtype=np.float32)
+indices = np.array([0, 1, 2], dtype=np.uint32)
+mesh = Mesh(vertices, indices)
+
+# Save the mesh to a zip file
+save_mesh_to_zip(mesh, "mesh.zip")
+
+# Load the mesh from the zip file
+loaded_mesh = load_mesh_from_zip(Mesh, "mesh.zip")
+
+# You can also work with encoded meshes directly
+from meshoptimizer import encode_mesh, save_encoded_mesh_to_zip, load_encoded_mesh_from_zip
+
+# Encode the mesh
+encoded_mesh = encode_mesh(vertices, indices)
+
+# Save the encoded mesh to a zip file with custom filenames
+save_encoded_mesh_to_zip(
+    encoded_mesh,
+    "encoded_mesh.zip",
+    vertices_filename="verts.bin",
+    indices_filename="idx.bin",
+    metadata_filename="meta.json"
+)
+
+# Load the encoded mesh from the zip file
+loaded_encoded_mesh = load_encoded_mesh_from_zip(
+    "encoded_mesh.zip",
+    vertices_filename="verts.bin",
+    indices_filename="idx.bin",
+    metadata_filename="meta.json"
+)
+```
+
+The zip file contains:
+- Binary file for encoded vertices
+- Binary file for encoded indices
+- JSON file with metadata (vertex_count, vertex_size, index_count, index_size)
+
+## Numpy Array Compression
+
+You can compress and store any numpy array using the meshoptimizer encoding functions:
+
+```python
+import numpy as np
+from meshoptimizer import (
+    encode_array,
+    decode_array,
+    save_array_to_file,
+    load_array_from_file,
+    save_array_to_zip,
+    load_array_from_zip,
+    save_arrays_to_zip,
+    load_arrays_from_zip
+)
+
+# Create a numpy array
+array_2d = np.random.random((1000, 3)).astype(np.float32)
+print(f"Original array size: {array_2d.nbytes} bytes")
+
+# Encode the array
+encoded_array = encode_array(array_2d)
+print(f"Encoded size: {len(encoded_array.data)} bytes")
+print(f"Compression ratio: {len(encoded_array.data) / array_2d.nbytes:.2f}")
+
+# Decode the array
+decoded_array = decode_array(encoded_array)
+print(f"Decoded array shape: {decoded_array.shape}")
+
+# Verify the decoded array matches the original
+is_close = np.allclose(decoded_array, array_2d, rtol=1e-5)
+print(f"Decoded array matches original: {is_close}")
+
+# Save to a file
+save_array_to_file(array_2d, "compressed_array.bin")
+
+# Load from a file
+loaded_array = load_array_from_file("compressed_array.bin")
+
+# Save to a zip file
+save_array_to_zip(array_2d, "compressed_array.zip")
+
+# Load from a zip file
+loaded_array = load_array_from_zip("compressed_array.zip")
+
+# Work with multiple arrays
+arrays = {
+    "positions": np.random.random((1000, 3)).astype(np.float32),
+    "normals": np.random.random((1000, 3)).astype(np.float32),
+    "colors": np.random.random((1000, 4)).astype(np.float32),
+    "indices": np.random.randint(0, 1000, (2000,), dtype=np.uint32)
+}
+
+# Save multiple arrays to a single zip file
+save_arrays_to_zip(arrays, "multiple_arrays.zip")
+
+# Load multiple arrays from a zip file
+loaded_arrays = load_arrays_from_zip("multiple_arrays.zip")
+```
+
+The array compression works with arrays of any shape and most numeric data types. The compression is particularly effective for arrays with spatial coherence, such as vertex positions, normals, or other 3D data.
 
 ## API Reference
 
@@ -170,6 +282,28 @@ When using the index buffer encoding and decoding functions, note that the decod
 - `decode_filter_oct(buffer, count, stride)`: Apply octahedral filter to decoded data.
 - `decode_filter_quat(buffer, count, stride)`: Apply quaternion filter to decoded data.
 - `decode_filter_exp(buffer, count, stride)`: Apply exponential filter to decoded data.
+
+#### Zip File Storage
+
+- `save_encoded_mesh_to_zip(encoded_mesh, zip_path, vertices_filename="vertices.bin", indices_filename="indices.bin", metadata_filename="metadata.json")`: Save an encoded mesh to a zip file.
+- `load_encoded_mesh_from_zip(zip_path, vertices_filename="vertices.bin", indices_filename="indices.bin", metadata_filename="metadata.json")`: Load an encoded mesh from a zip file.
+- `save_mesh_to_zip(mesh, zip_path, vertices_filename="vertices.bin", indices_filename="indices.bin", metadata_filename="metadata.json")`: Encode and save a mesh to a zip file.
+- `load_mesh_from_zip(mesh_class, zip_path, vertices_filename="vertices.bin", indices_filename="indices.bin", metadata_filename="metadata.json")`: Load a mesh from a zip file.
+
+#### Array Compression
+
+- `encode_array(array)`: Encode a numpy array using meshoptimizer's vertex buffer encoding.
+- `decode_array(encoded_array)`: Decode an encoded array.
+- `save_encoded_array_to_file(encoded_array, file_path)`: Save an encoded array to a file.
+- `load_encoded_array_from_file(file_path)`: Load an encoded array from a file.
+- `save_array_to_file(array, file_path)`: Encode and save a numpy array to a file.
+- `load_array_from_file(file_path)`: Load and decode a numpy array from a file.
+- `save_encoded_array_to_zip(encoded_array, zip_path, data_filename="data.bin", metadata_filename="metadata.json")`: Save an encoded array to a zip file.
+- `load_encoded_array_from_zip(zip_path, data_filename="data.bin", metadata_filename="metadata.json")`: Load an encoded array from a zip file.
+- `save_array_to_zip(array, zip_path, data_filename="data.bin", metadata_filename="metadata.json")`: Encode and save a numpy array to a zip file.
+- `load_array_from_zip(zip_path, data_filename="data.bin", metadata_filename="metadata.json")`: Load and decode a numpy array from a zip file.
+- `save_arrays_to_zip(arrays, zip_path)`: Encode and save multiple numpy arrays to a zip file.
+- `load_arrays_from_zip(zip_path)`: Load and decode multiple numpy arrays from a zip file.
 
 ## License
 

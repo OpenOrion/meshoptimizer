@@ -5,6 +5,7 @@ import ctypes
 from typing import Optional, Union, Tuple, Any, List
 import numpy as np
 from ._loader import lib
+from .data import EncodedMesh
 
 def decode_vertex_buffer(vertex_count: int, 
                         vertex_size: int, 
@@ -185,3 +186,32 @@ def decode_filter_exp(buffer: np.ndarray, count: int, stride: int) -> np.ndarray
     )
     
     return result_buffer
+
+def decode_mesh(encoded_mesh: EncodedMesh) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Decode both vertex and index buffers from an EncodedMesh object.
+    
+    Args:
+        encoded_mesh: EncodedMesh object containing encoded buffers and size information
+        
+    Returns:
+        Tuple of (vertices, indices) where vertices is a numpy array of vertex data
+        and indices is a numpy array of index data (or None if no indices were encoded)
+    """
+    # Decode vertices
+    vertices = decode_vertex_buffer(
+        encoded_mesh.vertex_count,
+        encoded_mesh.vertex_size,
+        encoded_mesh.vertices
+    )
+    
+    # Decode indices if present
+    indices = None
+    if encoded_mesh.indices is not None and encoded_mesh.index_count is not None:
+        indices = decode_index_buffer(
+            encoded_mesh.index_count,
+            encoded_mesh.index_size,
+            encoded_mesh.indices
+        )
+    
+    return vertices, indices

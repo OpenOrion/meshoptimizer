@@ -2,9 +2,11 @@
 Encoder functions for meshoptimizer.
 """
 import ctypes
+import struct
 from typing import Optional, Union, Tuple
 import numpy as np
 from ._loader import lib
+from .data import EncodedMesh
 
 def encode_vertex_buffer(vertices: np.ndarray, 
                         vertex_count: Optional[int] = None, 
@@ -96,26 +98,79 @@ def encode_index_buffer(indices: np.ndarray,
     # Return only the used portion of the buffer
     return bytes(buffer[:result_size])
 
-def encode_vertex_version(version: int) -> None:
+def encode_vertex_version() -> int:
     """
     Set vertex encoder format version.
     
-    Args:
-        version: version number (0 or 1)
+    Returns:
+        int: The version that was set (1)
     """
-    if version not in (0, 1):
-        raise ValueError("Version must be 0 or 1")
-    
+    version = 1  # Using version 1 as default
     lib.meshopt_encodeVertexVersion(version)
+    return version
 
-def encode_index_version(version: int) -> None:
+def encode_index_version() -> int:
     """
     Set index encoder format version.
     
-    Args:
-        version: version number (0 or 1)
+    Returns:
+        int: The version that was set (1)
     """
-    if version not in (0, 1):
-        raise ValueError("Version must be 0 or 1")
-    
+    version = 1  # Using version 1 as default
     lib.meshopt_encodeIndexVersion(version)
+    return version
+
+def encode_mesh(vertices: np.ndarray,
+               indices: Optional[np.ndarray] = None,
+               vertex_count: Optional[int] = None,
+               vertex_size: Optional[int] = None,
+               index_count: Optional[int] = None) -> EncodedMesh:
+    """
+    Encode both vertex and index buffers with size information.
+    
+    Args:
+        vertices: numpy array of vertex data
+        indices: numpy array of index data (optional)
+        vertex_count: number of vertices (optional, derived from vertices if not provided)
+        vertex_size: size of each vertex in bytes (optional, derived from vertices if not provided)
+        index_count: number of indices (optional, derived from indices if not provided)
+        
+    Returns:
+        EncodedMesh object containing encoded buffers and size information
+    """
+    # Convert vertices to numpy array if it's not already
+    vertices = np.asarray(vertices, dtype=np.float32)
+    
+    # Derive vertex_count and vertex_size if not provided
+    if vertex_count is None:
+        vertex_count = len(vertices)
+    
+    if vertex_size is None:
+        vertex_size = vertices.itemsize * vertices.shape[1] if len(vertices.shape) > 1 else vertices.itemsize
+    
+    # Encode vertices
+    encoded_vertices = encode_vertex_buffer(vertices, vertex_count, vertex_size)
+    
+    # Encode indices if provided
+    encoded_indices = None
+    derived_index_count = None
+    index_size = 4  # Default to 4 bytes (uint32)
+    
+    if indices is not None:
+        indices = np.asarray(indices, dtype=np.uint32)
+        
+        if index_count is None:
+            index_count = len(indices)
+        
+        derived_index_count = index_count
+        encoded_indices = encode_index_buffer(indices, index_count, vertex_count)
+    
+    # Create and return EncodedMesh object
+    return EncodedMesh(
+        vertices=encoded_vertices,
+        indices=encoded_indices,
+        vertex_count=vertex_count,
+        vertex_size=vertex_size,
+        index_count=derived_index_count,
+        index_size=index_size
+    )

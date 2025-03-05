@@ -3,13 +3,17 @@ Python wrapper for the meshoptimizer library.
 
 This package provides Python bindings for the meshoptimizer C++ library,
 which offers various algorithms for optimizing 3D meshes for GPU rendering.
+It also provides utilities for compressing and storing numpy arrays.
 """
+
+from .data import EncodedMesh
 
 from .encoder import (
     encode_vertex_buffer,
     encode_index_buffer,
     encode_vertex_version,
     encode_index_version,
+    encode_mesh,
 )
 
 from .decoder import (
@@ -20,6 +24,7 @@ from .decoder import (
     decode_filter_oct,
     decode_filter_quat,
     decode_filter_exp,
+    decode_mesh,
 )
 
 from .optimizer import (
@@ -49,8 +54,32 @@ from .utils import (
     remap_index_buffer,
 )
 
+from .ziputils import (
+    save_encoded_mesh_to_zip,
+    load_encoded_mesh_from_zip,
+    save_mesh_to_zip,
+    load_mesh_from_zip,
+)
+
+from .arrayutils import (
+    EncodedArray,
+    encode_array,
+    decode_array,
+    save_encoded_array_to_file,
+    load_encoded_array_from_file,
+    save_array_to_file,
+    load_array_from_file,
+    save_encoded_array_to_zip,
+    load_encoded_array_from_zip,
+    save_array_to_zip,
+    load_array_from_zip,
+    save_arrays_to_zip,
+    load_arrays_from_zip,
+)
+
 import numpy as np
 from typing import Optional, Union, Dict, Any, ClassVar, Type, TypeVar
+from .data import EncodedMesh
 
 T = TypeVar('T', bound='Mesh')
 
@@ -193,67 +222,63 @@ class Mesh:
         self.index_count = new_index_count
         return self
     
-    def encode(self) -> Dict[str, bytes]:
+    def encode(self) -> EncodedMesh:
         """
         Encode the mesh for efficient transmission.
         
         Returns:
-            Dictionary with encoded vertices and indices
+            EncodedMesh object containing encoded buffers and size information
         """
-        # Encode vertices
-        encoded_vertices = encode_vertex_buffer(
-            self.vertices, 
-            self.vertex_count, 
-            self.vertices.itemsize * self.vertices.shape[1]
+        return encode_mesh(
+            self.vertices,
+            self.indices,
+            self.vertex_count,
+            self.vertices.itemsize * self.vertices.shape[1],
+            self.index_count
         )
-        
-        # Encode indices if present
-        encoded_indices = None
-        if self.indices is not None:
-            encoded_indices = encode_index_buffer(
-                self.indices, 
-                self.index_count, 
-                self.vertex_count
-            )
-        
-        return {
-            'vertices': encoded_vertices,
-            'indices': encoded_indices
-        }
     
     @classmethod
-    def decode(cls: Type[T], encoded_data: Dict[str, bytes], 
-              vertex_count: int, vertex_size: int, 
-              index_count: Optional[int] = None, 
+    def decode(cls: Type[T], encoded_data: Union[Dict[str, bytes], EncodedMesh],
+              vertex_count: Optional[int] = None,
+              vertex_size: Optional[int] = None,
+              index_count: Optional[int] = None,
               index_size: int = 4) -> T:
         """
         Decode an encoded mesh.
         
         Args:
-            encoded_data: Dictionary with encoded vertices and indices
-            vertex_count: Number of vertices
-            vertex_size: Size of each vertex in bytes
-            index_count: Number of indices (optional)
+            encoded_data: Either an EncodedMesh object or a dictionary with encoded vertices and indices
+            vertex_count: Number of vertices (optional if encoded_data is EncodedMesh)
+            vertex_size: Size of each vertex in bytes (optional if encoded_data is EncodedMesh)
+            index_count: Number of indices (optional if encoded_data is EncodedMesh)
             index_size: Size of each index in bytes (default: 4)
             
         Returns:
             Decoded Mesh object
         """
-        # Decode vertices using the new function that returns a numpy array
-        vertices = decode_vertex_buffer(
-            vertex_count, 
-            vertex_size, 
-            encoded_data['vertices']
-        )
-        
-        # Decode indices if present using the new function that returns a numpy array
-        indices = None
-        if encoded_data['indices'] is not None and index_count is not None:
-            indices = decode_index_buffer(
-                index_count, 
-                index_size, 
-                encoded_data['indices']
+        if isinstance(encoded_data, EncodedMesh):
+            # Use the EncodedMesh object directly
+            vertices, indices = decode_mesh(encoded_data)
+        else:
+            # Legacy dictionary format
+            if vertex_count is None or vertex_size is None:
+                raise ValueError("vertex_count and vertex_size must be provided when using dictionary format")
+            
+            # Decode vertices
+            vertices = decode_vertex_buffer(
+                vertex_count,
+                vertex_size,
+                encoded_data['vertices']
             )
+            
+            # Decode indices if present
+            indices = None
+            if encoded_data['indices'] is not None and index_count is not None:
+                indices = decode_index_buffer(
+                    index_count,
+                    index_size,
+                    encoded_data['indices']
+                )
         
         return cls(vertices, indices)
 
