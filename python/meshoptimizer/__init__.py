@@ -8,6 +8,8 @@ It also provides utilities for compressing and storing numpy arrays.
 High-level functionality is available in the 'export' submodule.
 """
 
+from .limits import MeshoptLimits
+
 from .encoder import (
     encode_vertex_buffer,
     encode_index_buffer,
