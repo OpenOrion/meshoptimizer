@@ -6,6 +6,7 @@ import os
 import sys
 import platform
 import glob
+import sysconfig
 from typing import Optional, List, Any
 import numpy as np
 
@@ -14,13 +15,24 @@ def find_library() -> str:
     # Get the directory of this file
     this_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Look for any _meshoptimizer*.so or _meshoptimizer*.pyd file
+    # Prefer the exact extension suffix for this interpreter.  It includes the
+    # ABI and architecture on platforms that need them (for example,
+    # ``cpython-312-x86_64-linux-gnu.so``), so a source tree containing build
+    # products for more than one device never loads the first glob result by
+    # accident.
+    extension_suffix = sysconfig.get_config_var("EXT_SUFFIX")
+    if extension_suffix:
+        exact = os.path.join(this_dir, f"_meshoptimizer{extension_suffix}")
+        if os.path.isfile(exact):
+            return exact
+
+    # Fall back to a generic local build artifact.
     if platform.system() == 'Windows':
         pattern = os.path.join(this_dir, '_meshoptimizer*.pyd')
     else:
         pattern = os.path.join(this_dir, '_meshoptimizer*.so')
     
-    lib_files = glob.glob(pattern)
+    lib_files = sorted(glob.glob(pattern))
     
     if lib_files:
         return lib_files[0]
